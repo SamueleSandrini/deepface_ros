@@ -1,0 +1,2 @@
+sensor_msgs/RegionOfInterest roi
+float64 confidence
