@@ -13,13 +13,14 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='kalman',
+    maintainer='Samuele Sandrini',
     maintainer_email='samuele.sandrini@polito.it',
-    description='TODO: Package description',
+    description='DeepFace Wrapper for ROS 2',
     license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'deepface_node = deepface_ros.deepface_node:main',
         ],
     },
 )
