@@ -19,7 +19,7 @@ from deepface import DeepFace
 from sensor_msgs.msg import Image
 from deepface_msgs.srv import FaceAnalysis as FaceAnalysisSrv
 from deepface_msgs.msg import Emotion, Race, Gender, FaceDetection
-from deepface
+from deepface_msgs.msg import FaceAnalysis as FaceAnalysisMsg
 
 @dataclass
 class DeepFaceNode(CascadeLifecycleNode):

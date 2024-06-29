@@ -110,7 +110,10 @@ def generate_launch_description():
     deepface_cmd = Node(
         package="deepface_ros",
         executable="deepface_node",
-        name="deepface_node"
+        name="deepface_node",
+        remappings=[
+            ("image", "/head_front_camera/rgb/image_raw"),
+        ]
     )
 
 
