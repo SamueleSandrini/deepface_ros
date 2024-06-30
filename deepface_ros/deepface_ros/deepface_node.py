@@ -14,32 +14,35 @@ from rclpy.qos import QoSDurabilityPolicy
 from rclpy.qos import QoSReliabilityPolicy
 
 from cv_bridge import CvBridge
-from deepface import DeepFace
+# from deepface import DeepFace
 
 from sensor_msgs.msg import Image
-from deepface_msgs.srv import FaceAnalysis as FaceAnalysisSrv
-from deepface_msgs.msg import Emotion, Race, Gender, FaceDetection
-from deepface_msgs.msg import FaceAnalysis as FaceAnalysisMsg
+from deepface_msgs.srv import FacesAnalysis as FacesAnalysisSrv
+from deepface_msgs.srv import ImageFacesAnalysis
+from deepface_msgs.msg import Emotion, Race, Gender, FaceDetection, FaceAnalysis, FacesAnalysis
 
-@dataclass
+
 class DeepFaceNode(CascadeLifecycleNode):
-    # _face_analysis_srv: Optional[Service] = field(init=False, default_factory=None)
+    # face_analysis_srv: Optional[Service] = field(init=False, default_factory=None)
     # _cv_bridge: CvBridge = field(init=False, default_factory=CvBridge)
 
-    def __post_init__(self):
+    def __init__(self):
         super().__init__("deepface_node")
-        self._face_analysis_pub: Optional[Publisher] = None
-        self.first_configuration = True
+        self.face_analysis_pub: Optional[Publisher] = None
+        self.image_sub = None
+        self.image = None
 
-        self.declare_parameter("model", "yolov8m.pt")
+        self.declare_parameter("publish_online_analysis", True)
+        self.declare_parameter("image_reliability",
+                            QoSReliabilityPolicy.BEST_EFFORT)
 
 
     def on_configure(self, state: State) -> TransitionCallbackReturn:
         self.get_logger().info(f'Configuring from {state.label} state...')
         # params
                 
-        self.model = self.get_parameter(
-            "model").get_parameter_value().string_value
+        self.publish_online_analysis = self.get_parameter(
+            "publish_online_analysis").get_parameter_value().bool_value
 
         self.image_qos_profile = QoSProfile(
             reliability=self.get_parameter(
@@ -48,9 +51,10 @@ class DeepFaceNode(CascadeLifecycleNode):
             durability=QoSDurabilityPolicy.VOLATILE,
             depth=1
         )
-        self._face_analysis_pub = self.create_lifecycle_publisher(FaceAnalysisMsg, "face_analysis", 10)
+        self.face_analysis_pub = self.create_lifecycle_publisher(FacesAnalysis, "faces_analysis", 10)
 
-        self._face_analysis_srv = self.create_service(FaceAnalysisSrv, "face_analysis", self.face_analysis)
+        self.face_analysis_srv = self.create_service(FacesAnalysisSrv, "faces_analysis", self.face_analysis_callback)
+        self.image_face_analysis_srv = self.create_service(ImageFacesAnalysis, "image_faces_analysis", self.image_face_analysis_callback)
         
 
         # cv bridge
@@ -61,7 +65,7 @@ class DeepFaceNode(CascadeLifecycleNode):
     def on_activate(self, state: State) -> TransitionCallbackReturn:
         self.get_logger().info(f'Activating from {state.label} state...')
         
-        self._image_sub = self.create_subscription(
+        self.image_sub = self.create_subscription(
             Image, "image", self.image_cb,
             self.image_qos_profile
         )
@@ -76,67 +80,144 @@ class DeepFaceNode(CascadeLifecycleNode):
     def on_cleanup(self, state: State) -> TransitionCallbackReturn:
         self.get_logger().info(f'Cleaning from {state.label} state...')
 
-        self.destroy_service(self._face_analysis_srv)
-        self.destroy_publisher(self._face_analysis_pub)
+        self.destroy_service(self.face_analysis_srv)
+        self.destroy_service(self.image_face_analysis_srv)
+        self.destroy_publisher(self.face_analysis_pub)
 
         return super().on_cleanup(state)
 
     def on_shutdown(self, state: State) -> TransitionCallbackReturn:
         self.get_logger().info(f'Shutting down from {state.label} state...')
-        self.destroy_service(self._srv_face_analysis_srv)
-        self.destroy_publisher(self._face_analysis_pub)
+        self.destroy_service(self.face_analysis_srv)
+        self.destroy_service(self.image_face_analysis_srv)
+        self.destroy_publisher(self.face_analysis_pub)
 
         return super().on_shutdown(state)
 
     def image_cb(self, msg: Image) -> None:
         self.image = self.cv_bridge.imgmsg_to_cv2(msg)
-        face_analysis_msg = self.face_analysis(self.image)
-        self._face_analysis_pub.publish(face_analysis_msg)
+        if self.publish_online_analysis:
+            faces_analysis_msg = self.face_analysis(self.image)
+            self.face_analysis_pub.publish(faces_analysis_msg)
 
-    def face_analysis_callback(self, req: FaceAnalysisSrv.Request, res: FaceAnalysisSrv.Response):
+    def image_face_analysis_callback(self, req: ImageFacesAnalysis.Request, res: ImageFacesAnalysis.Response):
         
         cv_image = self.cv_bridge.imgmsg_to_cv2(req.image)
         
-        face_analysis_msg = self.face_analysis(cv_image)
+        faces_analysis_msgs = self.face_analysis(cv_image)
         
-        res.face_analysis = face_analysis_msg
+        res.faces_analysis = faces_analysis_msgs
         res.success = True
         
         return res
+    
+    def face_analysis_callback(self, req: FacesAnalysisSrv.Request, res: FacesAnalysisSrv.Response):
         
-    def face_analysis(self, cv_image) -> FaceAnalysisMsg:
-        result = DeepFace.analyze(cv_image)
-
-        result_msg = FaceAnalysisMsg()
-        result_msg.age = result['age']
-        result_msg.dominant_emotion = result['dominant_emotion']
-        result_msg.dominant_gender = result['dominant_gender']
-        result_msg.dominant_race = result['dominant_race']
+        image_to_analyse = self.image
         
-        result_msg.face_detection = FaceDetection()
-        result_msg.face_detection.roi.x_offset = result['region']['x']
-        result_msg.face_detection.roi.y_offset = result['region']['y']
-        result_msg.face_detection.roi.height = result['region']['h']
-        result_msg.face_detection.roi.width = result['region']['w']
-        result_msg.face_confidence = result['face_confidence']
+        if image_to_analyse is None:
+            res.success = False
+            return res
+        
+        faces_analysis_msgs = self.face_analysis(image_to_analyse)
+                
+        res.faces_analysis = faces_analysis_msgs
+        res.success = True
+        
+        return res
+    
+    def face_analysis(self, cv_image) -> FacesAnalysis:
+        # result = DeepFace.analyze(cv_image)
+        result = [{
+            'age': 25,
+            'dominant_emotion': 'happy',
+            'dominant_gender': 'female',
+            'dominant_race': 'asian',
+            'region': {
+                'x': 100,
+                'y': 150,
+                'h': 200,
+                'w': 150
+            },
+            'face_confidence': 0.98,
+            'emotion': {
+                'happy': 0.9,
+                'sad': 0.05,
+                'neutral': 0.05
+            },
+            'gender': {
+                'female': 0.95,
+                'male': 0.05
+            },
+            'race': {
+                'asian': 0.8,
+                'white': 0.1,
+                'black': 0.1
+            }
+        },
+        {
+            'age': 25,
+            'dominant_emotion': 'happy',
+            'dominant_gender': 'female',
+            'dominant_race': 'asian',
+            'region': {
+                'x': 100,
+                'y': 150,
+                'h': 200,
+                'w': 150
+            },
+            'face_confidence': 0.98,
+            'emotion': {
+                'happy': 0.9,
+                'sad': 0.05,
+                'neutral': 0.05
+            },
+            'gender': {
+                'female': 0.95,
+                'male': 0.05
+            },
+            'race': {
+                'asian': 0.8,
+                'white': 0.1,
+                'black': 0.1
+            }
+        }]
+        faces_analysis_msg = FacesAnalysis()
+        
+        for face_analysis in result:
+            result_msg = FaceAnalysis()
 
-        for emotion in result['emotion']:
-            emotion_msg = Emotion()
-            emotion_msg.type = emotion
-            emotion_msg.value = result['emotion'][emotion]
-            result_msg.emotions.append(emotion_msg)
-        for gender, score in result['gender'].items():
-            gender_msg = Gender()
-            gender_msg.gender = gender
-            gender_msg.score = score
-            result_msg.genders.append(gender_msg)
-        for race, score in result['race'].items():
-            race_msg = Race()
-            race_msg.race = race
-            race_msg.score = score
-            result_msg.races.append(race_msg)            
+            result_msg.age = face_analysis['age']
+            result_msg.dominant_emotion = face_analysis['dominant_emotion']
+            result_msg.dominant_gender = face_analysis['dominant_gender']
+            result_msg.dominant_race = face_analysis['dominant_race']
+            
+            result_msg.face_detection = FaceDetection()
+            result_msg.face_detection.roi.x_offset = face_analysis['region']['x']
+            result_msg.face_detection.roi.y_offset = face_analysis['region']['y']
+            result_msg.face_detection.roi.height = face_analysis['region']['h']
+            result_msg.face_detection.roi.width = face_analysis['region']['w']
+            result_msg.face_detection.confidence = face_analysis['face_confidence']
 
-
+            for emotion in face_analysis['emotion']:
+                emotion_msg = Emotion()
+                emotion_msg.emotion = emotion
+                emotion_msg.score = face_analysis['emotion'][emotion]
+                result_msg.emotions.append(emotion_msg)
+            for gender, score in face_analysis['gender'].items():
+                gender_msg = Gender()
+                gender_msg.gender = gender
+                gender_msg.score = score
+                result_msg.genders.append(gender_msg)
+            for race, score in face_analysis['race'].items():
+                race_msg = Race()
+                race_msg.race = race
+                race_msg.score = score
+                result_msg.races.append(race_msg)            
+            
+            faces_analysis_msg.faces_analysis.append(result_msg)
+        return faces_analysis_msg
+            
     
 def main():
     rclpy.init()

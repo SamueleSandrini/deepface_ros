@@ -1,4 +1,0 @@
-sensor_msgs/Image image
----
-bool success
-deepface_msgs/FaceAnalysis face_analysis

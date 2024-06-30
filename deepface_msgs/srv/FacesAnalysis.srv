@@ -1,0 +1,3 @@
+---
+bool success
+deepface_msgs/FacesAnalysis faces_analysis

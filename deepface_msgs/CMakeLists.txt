@@ -18,13 +18,15 @@ set(msg_files
   "msg/Gender.msg"
   "msg/FaceDetection.msg"
   "msg/FaceAnalysis.msg"
+  "msg/FacesAnalysis.msg"
 )
 
 set(srv_files
   "srv/FaceVerification.srv"
   "srv/FaceRecognition.srv"
   "srv/FaceDetection.srv"
-  "srv/FaceAnalysis.srv"
+  "srv/FacesAnalysis.srv"
+  "srv/ImageFacesAnalysis.srv"
 )
 
 set(action_files
