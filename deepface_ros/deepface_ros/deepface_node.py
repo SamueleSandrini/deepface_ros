@@ -14,7 +14,7 @@ from rclpy.qos import QoSDurabilityPolicy
 from rclpy.qos import QoSReliabilityPolicy
 
 from cv_bridge import CvBridge
-# from deepface import DeepFace
+from deepface import DeepFace
 
 from sensor_msgs.msg import Image
 from deepface_msgs.srv import FacesAnalysis as FacesAnalysisSrv
@@ -23,8 +23,6 @@ from deepface_msgs.msg import Emotion, Race, Gender, FaceDetection, FaceAnalysis
 
 
 class DeepFaceNode(CascadeLifecycleNode):
-    # face_analysis_srv: Optional[Service] = field(init=False, default_factory=None)
-    # _cv_bridge: CvBridge = field(init=False, default_factory=CvBridge)
 
     def __init__(self):
         super().__init__("deepface_node")
@@ -88,6 +86,7 @@ class DeepFaceNode(CascadeLifecycleNode):
 
     def on_shutdown(self, state: State) -> TransitionCallbackReturn:
         self.get_logger().info(f'Shutting down from {state.label} state...')
+        
         self.destroy_service(self.face_analysis_srv)
         self.destroy_service(self.image_face_analysis_srv)
         self.destroy_publisher(self.face_analysis_pub)
@@ -95,7 +94,9 @@ class DeepFaceNode(CascadeLifecycleNode):
         return super().on_shutdown(state)
 
     def image_cb(self, msg: Image) -> None:
+        
         self.image = self.cv_bridge.imgmsg_to_cv2(msg)
+
         if self.publish_online_analysis:
             faces_analysis_msg = self.face_analysis(self.image)
             self.face_analysis_pub.publish(faces_analysis_msg)
@@ -103,7 +104,6 @@ class DeepFaceNode(CascadeLifecycleNode):
     def image_face_analysis_callback(self, req: ImageFacesAnalysis.Request, res: ImageFacesAnalysis.Response):
         
         cv_image = self.cv_bridge.imgmsg_to_cv2(req.image)
-        
         faces_analysis_msgs = self.face_analysis(cv_image)
         
         res.faces_analysis = faces_analysis_msgs
@@ -127,61 +127,8 @@ class DeepFaceNode(CascadeLifecycleNode):
         return res
     
     def face_analysis(self, cv_image) -> FacesAnalysis:
-        # result = DeepFace.analyze(cv_image)
-        result = [{
-            'age': 25,
-            'dominant_emotion': 'happy',
-            'dominant_gender': 'female',
-            'dominant_race': 'asian',
-            'region': {
-                'x': 100,
-                'y': 150,
-                'h': 200,
-                'w': 150
-            },
-            'face_confidence': 0.98,
-            'emotion': {
-                'happy': 0.9,
-                'sad': 0.05,
-                'neutral': 0.05
-            },
-            'gender': {
-                'female': 0.95,
-                'male': 0.05
-            },
-            'race': {
-                'asian': 0.8,
-                'white': 0.1,
-                'black': 0.1
-            }
-        },
-        {
-            'age': 25,
-            'dominant_emotion': 'happy',
-            'dominant_gender': 'female',
-            'dominant_race': 'asian',
-            'region': {
-                'x': 100,
-                'y': 150,
-                'h': 200,
-                'w': 150
-            },
-            'face_confidence': 0.98,
-            'emotion': {
-                'happy': 0.9,
-                'sad': 0.05,
-                'neutral': 0.05
-            },
-            'gender': {
-                'female': 0.95,
-                'male': 0.05
-            },
-            'race': {
-                'asian': 0.8,
-                'white': 0.1,
-                'black': 0.1
-            }
-        }]
+        result = DeepFace.analyze(cv_image)
+        
         faces_analysis_msg = FacesAnalysis()
         
         for face_analysis in result:
