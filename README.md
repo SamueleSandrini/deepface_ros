@@ -11,7 +11,7 @@ git clone https://github.com/SamueleSandrini/deepface_ros
 pip3 install -r deepface_ros/requirements.txt
 cd ~/ros2_ws
 rosdep install --from-paths src --ignore-src -r -y
-colcon build
+colcon build --symlink-install
 ```
 
 ## Usage
