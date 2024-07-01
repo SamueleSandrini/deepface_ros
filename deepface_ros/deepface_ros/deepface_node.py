@@ -127,10 +127,13 @@ class DeepFaceNode(CascadeLifecycleNode):
         return res
     
     def face_analysis(self, cv_image) -> FacesAnalysis:
-        result = DeepFace.analyze(cv_image)
-        
         faces_analysis_msg = FacesAnalysis()
         
+        try:
+            result = DeepFace.analyze(cv_image)
+        except Exception as e:
+            return faces_analysis_msg
+
         for face_analysis in result:
             result_msg = FaceAnalysis()
 
@@ -140,8 +143,8 @@ class DeepFaceNode(CascadeLifecycleNode):
             result_msg.dominant_race = face_analysis['dominant_race']
             
             result_msg.face_detection = FaceDetection()
-            result_msg.face_detection.roi.x_offset = face_analysis['region']['x']
-            result_msg.face_detection.roi.y_offset = face_analysis['region']['y']
+            result_msg.face_detection.roi.x_offset = max(0,face_analysis['region']['x'])
+            result_msg.face_detection.roi.y_offset = max(0,face_analysis['region']['y'])
             result_msg.face_detection.roi.height = face_analysis['region']['h']
             result_msg.face_detection.roi.width = face_analysis['region']['w']
             result_msg.face_detection.confidence = face_analysis['face_confidence']
